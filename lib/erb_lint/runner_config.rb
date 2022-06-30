@@ -54,6 +54,7 @@ module ERBLint
             ClosingErbTagIndent: { enabled: default_enabled },
             ExtraNewline: { enabled: default_enabled },
             FinalNewline: { enabled: default_enabled },
+            Indentation: { enabled: default_enabled },
             NoJavascriptTagHelper: { enabled: default_enabled },
             ParserErrors: { enabled: default_enabled },
             RightTrim: { enabled: default_enabled },

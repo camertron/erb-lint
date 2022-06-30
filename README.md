@@ -96,6 +96,7 @@ linters:
 | ClosingErbTagIndent                              | Yes      |             |
 | ExtraNewline                                     | Yes      |             |
 | [FinalNewline](#FinalNewline)                    | Yes      | warns about missing newline at the end of a ERB template |
+| [Indentation](#Indentation)                      | Yes      | warns about wrong amounts of indentation whitespace |
 | [NoJavascriptTagHelper](#NoJavascriptTagHelper)  | Yes      | prevents the usage of Rails' `javascript_tag` |
 | ParserErrors                                     | Yes      |             |
 | PartialInstanceVariable                          | No       | detects instance variables in partials |
@@ -164,6 +165,27 @@ linters:
 Linter-Specific Option | Description
 -----------------------|---------------------------------------------------------
 `present`              | Whether a final newline should be present (default **true**)
+
+### Indentation
+
+HTML tags and ERB content should be indented properly.
+
+You can customize the indentation style ("tabs" or "spaces") as well as the indentation
+width (number of tabs or spaces).
+
+Example configuration:
+
+```yaml
+---
+linters:
+  Indentation:
+    enabled: true
+```
+
+Linter-Specific Option | Description
+-----------------------|---------------------------------------------------------
+`enforced_style`       | The indentation character to use (default **spaces**)
+`indent_width`         | The number of characters per indentation level (default is **2** if `enforced_style` is spaces, **1** if tabs)
 
 ### ErbSafety
 
@@ -355,15 +377,15 @@ Linter-Specific Option | Description
 `correction_style`     | When configured with `cdata`, adds CDATA markers. When configured with `plain`, don't add makers. Defaults to `cdata`.
 
 ### RequireScriptNonce
-This linter prevents the usage of HTML `<script>`, Rails `javascript_tag`, `javascript_include_tag` and `javascript_pack_tag` without a `nonce` argument. The purpose of such a check is to ensure that when [content securty policy](https://edgeguides.rubyonrails.org/security.html#content-security-policy) is implemented in an application, there is a means of discovering tags that need to be updated with a `nonce` argument to enable script execution at application runtime. 
+This linter prevents the usage of HTML `<script>`, Rails `javascript_tag`, `javascript_include_tag` and `javascript_pack_tag` without a `nonce` argument. The purpose of such a check is to ensure that when [content securty policy](https://edgeguides.rubyonrails.org/security.html#content-security-policy) is implemented in an application, there is a means of discovering tags that need to be updated with a `nonce` argument to enable script execution at application runtime.
 
 ```
 Bad ❌
-<script> 
+<script>
     alert(1)
 </script>
 Good ✅
-<script nonce="<%= request.content_security_policy_nonce %>" > 
+<script nonce="<%= request.content_security_policy_nonce %>" >
     alert(1)
 </script>
 ```
