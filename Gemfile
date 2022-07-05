@@ -9,3 +9,5 @@ group "test" do
 end
 
 gemspec
+
+gem "pry-byebug"

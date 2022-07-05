@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require "pry-byebug"
+require "erb_lint/utils/source_map"
+require "erb_lint/utils/source_map_corrector"
 
 module ERBLint
   module Linters
@@ -28,7 +30,7 @@ module ERBLint
 
         def initialize
           @output = +""
-          @source_map = ::ERBLint::SourceMap.new
+          @source_map = ::ERBLint::Utils::SourceMap.new
         end
 
         def visit(node)
@@ -43,7 +45,6 @@ module ERBLint
 
         def visit_tag(node)
           tag = BetterHtml::Tree::Tag.from_node(node)
-          start_pos = @output.size
 
           if tag.closing?
             @output << "}"
@@ -53,7 +54,7 @@ module ERBLint
         end
 
         def visit_erb(node)
-          indicator_node, _, code_node, = *node
+          _, _, code_node, = *node
           code = code_node.loc.source
           len = code.size
 
@@ -131,12 +132,12 @@ module ERBLint
 
       SCHEMA_TO_COP_MAP = {
         "Layout/IndentationWidth" => {
-          "Width" => :width
+          "Width" => :width,
         },
 
         "Layout/BlockAlignment" => {
-          "EnforcedStyleAlignWith" => :enforced_style_block_align_with
-        }
+          "EnforcedStyleAlignWith" => :enforced_style_block_align_with,
+        },
       }
 
       SCHEMA_TO_COP_MAP.freeze
@@ -144,35 +145,51 @@ module ERBLint
       def initialize(file_loader, config)
         super
 
-        @rubocop_config = ::RuboCop::Config.create(
-          cop_config, "file.yml", check: false
-        )
+        @rubocop_config = if ::RuboCop::Config.method(:create).arity < 0
+          ::RuboCop::Config.create(cop_config, "file.yml", check: false)
+        else
+          ::RuboCop::Config.create(cop_config, "file.yml")
+        end
       end
 
       def run(processed_source)
         ir = IRTranspiler.transpile(processed_source.ast)
         ir_source = rubocop_processed_source(ir.source, "(intermediate)")
-        report = build_team.investigate(ir_source)
 
-        report.offenses.each do |offense|
-          add_offense(processed_source, offense, ir.source_map)
+        each_offense_in(ir_source, build_team) do |offense, correction|
+          add_offense(processed_source, offense, correction, ir.source_map)
         end
       end
 
-      def autocorrect(processed_source, offense)
-        return unless offense.context
+      if ::RuboCop::Version::STRING.to_f >= 0.87
+        def autocorrect(processed_source, offense)
+          return unless offense.context
 
-        rubocop_correction = offense.context[:rubocop_correction]
-        return unless rubocop_correction
+          rubocop_correction = offense.context[:rubocop_correction]
+          return unless rubocop_correction
 
-        source_map = offense.context[:source_map]
-        return unless source_map
+          source_map = offense.context[:source_map]
+          return unless source_map
 
-        lambda do |corrector|
-          rubocop_correction.as_nested_actions.each do |(action, range, *replacement_args)|
-            if (origin_range = source_map.translate(range.to_range))
-              corrector.send(action, processed_source.to_source_range(origin_range), *replacement_args)
+          lambda do |corrector|
+            rubocop_correction.as_nested_actions.each do |(action, range, *replacement_args)|
+              if (origin_range = source_map.translate(range.to_range))
+                corrector.send(action, processed_source.to_source_range(origin_range), *replacement_args)
+              end
             end
+          end
+        end
+      else
+        def autocorrect(processed_source, offense)
+          return unless offense.context
+
+          lambda do |corrector|
+            passthrough = Utils::SourceMapCorrector.new(
+              processed_source,
+              corrector,
+              offense.context[:source_map],
+            )
+            offense.context[:rubocop_correction].call(passthrough)
           end
         end
       end
@@ -193,8 +210,33 @@ module ERBLint
             memo[cop_class.cop_name] = {
               **default_config[cop_class.cop_name],
               **custom_config,
-              "Enabled" => true
+              "Enabled" => true,
             }
+          end
+        end
+      end
+
+      if ::RuboCop::Version::STRING.to_f >= 0.87
+        def each_offense_in(source, team)
+          report = team.investigate(source)
+          report.offenses.each do |offense|
+            yield offense, offense.corrector
+          end
+        end
+      else
+        def each_offense_in(source, team)
+          team.inspect_file(source)
+
+          team.cops.each do |cop|
+            correction_offset = 0
+            cop.offenses.reject(&:disabled?).each do |offense|
+              if offense.corrected?
+                correction = cop.corrections[correction_offset]
+                correction_offset += 1
+              end
+
+              yield offense, correction
+            end
           end
         end
       end
@@ -227,9 +269,9 @@ module ERBLint
         )
       end
 
-      def add_offense(processed_source, rubocop_offense, source_map)
+      def add_offense(processed_source, rubocop_offense, correction, source_map)
         context = if rubocop_offense.corrected?
-          { rubocop_correction: rubocop_offense.corrector, source_map: source_map }
+          { rubocop_correction: correction, source_map: source_map }
         end
 
         loc = processed_source.to_source_range(
