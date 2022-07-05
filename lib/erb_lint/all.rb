@@ -12,6 +12,7 @@ require "erb_lint/offense"
 require "erb_lint/processed_source"
 require "erb_lint/runner_config"
 require "erb_lint/runner"
+require "erb_lint/source_map"
 require "erb_lint/stats"
 require "erb_lint/reporter"
 

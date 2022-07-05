@@ -4,7 +4,7 @@ require "spec_helper"
 
 describe ERBLint::Linters::Indentation do
   let(:linter_config) do
-    described_class.config_schema.new(enforced_style: enforced_style)
+    described_class.config_schema.new # (enforced_style: enforced_style)
   end
 
   let(:file_loader) { ERBLint::FileLoader.new(".") }
@@ -58,18 +58,53 @@ describe ERBLint::Linters::Indentation do
       end
 
       context "when content is improperly indented" do
+        # let(:file) { <<~ERB }
+        #   <div>
+        #      <span class="foo">bar</span>
+        #      <%= hello_world %>
+        #   </div>
+        # ERB
+
+        # let(:file) { <<~ERB }
+        #   <div>
+        #    <span class="foo">bar</span>
+        #      <% 10.times do |i| %>
+        #          <%= i %>
+        #       <% end %>
+        #    </div>
+        # ERB
+
         let(:file) { <<~ERB }
-          <div>
-             <span class="foo">bar</span>
-             <%= hello_world %>
-          </div>
+<div>
+ <span class="foo">bar</span>
+ <% 10.times do |i| %>
+   <%= i %>
+ <% end %>
+ </div>
         ERB
 
+        # let(:file) { <<~ERB }
+        #   <% 5.times do |i| %>
+        #   <span>foo</span>
+        #   <% end %>
+        # ERB
+
+        # let(:file) { <<~ERB }
+        #   <div>
+        #     <span class="foo">bar</span>
+        #   <% 10.times do |i| %>
+        #       <%= i %>
+        #     <% end %>
+        #   </div>
+        # ERB
+
         it do
-          expect(subject).to(eq([
-            build_offense(6...9, "Expected line to be indented 1 level."),
-            build_offense(38...41, "Expected line to be indented 1 level."),
-          ]))
+          offenses = subject
+          puts corrected_content
+          # expect(subject).to(eq([
+          #   build_offense(6...9, "Expected line to be indented 1 level."),
+          #   build_offense(38...41, "Expected line to be indented 1 level."),
+          # ]))
         end
       end
 
