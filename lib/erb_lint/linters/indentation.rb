@@ -97,20 +97,39 @@ module ERBLint
           node.children.each do |child_node|
             if child_node.is_a?(String)
               leading_ws, text, trailing_ws = ws_split(child_node)
-              replacement = "#{leading_ws}#{text.empty? ? "" : "__text;"}#{trailing_ws}"
 
-              @source_map.add(
-                origin: pos...(pos + child_node.size),
-                dest: @output.size...(@output.size + replacement.size)
-              )
+              parts = [
+                [leading_ws, leading_ws],
+                [text, text.empty? ? "" : "__text;"],
+                [trailing_ws, trailing_ws]
+              ]
 
-              @output << replacement
-              pos += child_node.size
+              parts.each do |origin_part, dest_part|
+                unless origin_part.empty?
+                  @source_map.add(
+                    origin: pos...(pos + origin_part.size),
+                    dest: @output.size...(@output.size + dest_part.size)
+                  )
+
+                  @output << dest_part
+                end
+
+                pos += origin_part.size
+              end
             else
               visit(child_node)
               pos += child_node.loc.source.size
             end
           end
+        end
+
+        def visit_comment(node)
+          @source_map.add(
+            origin: node.loc.to_range,
+            dest: @output.size...(@output.size + 10)
+          )
+
+          @output << "__comment;"
         end
 
         def visit_children(node)
@@ -183,7 +202,7 @@ module ERBLint
           lambda do |corrector|
             rubocop_correction.as_nested_actions.each do |(action, range, *replacement_args)|
               if (origin_range = source_map.translate(range.to_range))
-                corrector.send(action, processed_source.to_source_range(origin_range), *replacement_args)
+                corrector.send(action, processed_source.to_source_range(origin_range), *replacement_args) rescue binding.pry
               end
             end
           end
@@ -275,6 +294,8 @@ module ERBLint
           autocorrect: true,
           auto_correct: true,
           stdin: "",
+          parallel: false,
+          debug: true,
         )
       end
 
