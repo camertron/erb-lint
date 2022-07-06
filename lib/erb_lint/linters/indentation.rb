@@ -47,7 +47,7 @@ module ERBLint
           tag = BetterHtml::Tree::Tag.from_node(node)
 
           if tag.closing?
-            @output << "}"
+            @output << "};"
           elsif !tag.self_closing?
             @output << "__tag {"
           end
@@ -83,20 +83,29 @@ module ERBLint
           )
         end
 
+        def ws_split(str)
+          leading_ws = str.match(/\A\s*/)[0]
+          trailing_ws = str.match(/\s*\z/, leading_ws.size)[0]
+          text = str[leading_ws.size...(str.size - trailing_ws.size)]
+
+          [leading_ws, text, trailing_ws]
+        end
+
         def visit_text(node)
           pos = node.loc.begin_pos
 
           node.children.each do |child_node|
             if child_node.is_a?(String)
-              if child_node =~ /\A\s*\z/
-                @source_map.add(
-                  origin: pos...(pos + child_node.size),
-                  dest: @output.size...(@output.size + child_node.size)
-                )
+              leading_ws, text, trailing_ws = ws_split(child_node)
+              replacement = "#{leading_ws}#{text.empty? ? "" : "__text;"}#{trailing_ws}"
 
-                @output << child_node
-                pos += child_node.size
-              end
+              @source_map.add(
+                origin: pos...(pos + child_node.size),
+                dest: @output.size...(@output.size + replacement.size)
+              )
+
+              @output << replacement
+              pos += child_node.size
             else
               visit(child_node)
               pos += child_node.loc.source.size
