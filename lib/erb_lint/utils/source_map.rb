@@ -23,8 +23,6 @@ module ERBLint
         return (begin_pos...end_pos) if begin_pos && end_pos
       end
 
-      private
-
       def translate_beginning(begin_pos)
         @map.each_pair do |dest_range, origin_range|
           return origin_range.begin if dest_range.begin == begin_pos
@@ -40,6 +38,8 @@ module ERBLint
 
         nil
       end
+
+      private
 
       def translate_relative(dest_point)
         @map.each_pair do |dest_range, origin_range|

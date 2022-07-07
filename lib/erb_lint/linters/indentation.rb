@@ -49,7 +49,7 @@ module ERBLint
           if tag.closing?
             emit(node.loc.source, node.loc.begin_pos, "}", ";")
           elsif !tag.self_closing?
-            emit(node.loc.source, node.loc.begin_pos, "__tag {")
+            emit(node.loc.source, node.loc.begin_pos, "__tag", "{")
           end
         end
 
@@ -306,18 +306,20 @@ module ERBLint
           { rubocop_correction: correction, source_map: source_map }
         end
 
-        loc = processed_source.to_source_range(
-          source_map.translate(rubocop_offense.location.to_range)
-        )
+        origin_loc = source_map.translate(rubocop_offense.location.to_range)
+        unless origin_loc
+          begin_pos = source_map.translate_beginning(rubocop_offense.location.begin_pos)
+          origin_loc = begin_pos...begin_pos
+        end
+
+        origin_loc = processed_source.to_source_range(origin_loc)
 
         super(
-          loc,
+          origin_loc,
           rubocop_offense.message.strip,
           context,
           rubocop_offense.severity.name
         )
-      rescue => e
-        binding.pry
       end
     end
   end
