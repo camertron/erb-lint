@@ -47,9 +47,9 @@ module ERBLint
           tag = BetterHtml::Tree::Tag.from_node(node)
 
           if tag.closing?
-            @output << "};"
+            emit(node.loc.source, node.loc.begin_pos, "}", ";")
           elsif !tag.self_closing?
-            @output << "__tag {"
+            emit(node.loc.source, node.loc.begin_pos, "__tag {")
           end
         end
 
@@ -99,19 +99,14 @@ module ERBLint
               leading_ws, text, trailing_ws = ws_split(child_node)
 
               parts = [
-                [leading_ws, leading_ws],
-                [text, text.empty? ? "" : "__text;"],
-                [trailing_ws, trailing_ws]
+                [leading_ws, [leading_ws]],
+                [text, text.empty? ? [""] : ["__text", ";"]],
+                [trailing_ws, [trailing_ws]]
               ]
 
-              parts.each do |origin_part, dest_part|
+              parts.each do |origin_part, dest_parts|
                 unless origin_part.empty?
-                  @source_map.add(
-                    origin: pos...(pos + origin_part.size),
-                    dest: @output.size...(@output.size + dest_part.size)
-                  )
-
-                  @output << dest_part
+                  emit(origin_part, pos, *dest_parts)
                 end
 
                 pos += origin_part.size
@@ -123,13 +118,20 @@ module ERBLint
           end
         end
 
-        def visit_comment(node)
-          @source_map.add(
-            origin: node.loc.to_range,
-            dest: @output.size...(@output.size + 10)
-          )
+        def emit(origin_str, origin_begin, *dest_strs)
+          dest_strs.each do |dest_str|
+            @source_map.add(
+              origin: origin_begin...(origin_begin + origin_str.size),
+              dest: @output.size...(@output.size + dest_str.size)
+            )
 
-          @output << "__comment;"
+            @output << dest_str
+            origin_begin += origin_str.size
+          end
+        end
+
+        def visit_comment(node)
+          emit(node.loc.source, node.loc.begin_pos, "__comment", ";")
         end
 
         def visit_children(node)
@@ -314,6 +316,8 @@ module ERBLint
           context,
           rubocop_offense.severity.name
         )
+      rescue => e
+        binding.pry
       end
     end
   end
