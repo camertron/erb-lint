@@ -13,8 +13,9 @@ module ERBLint
 
       def translate(range)
         begin_pos = translate_beginning(range.begin)
-        end_pos = translate_ending(range.end)
+        return (begin_pos...begin_pos) if begin_pos && range.size == 0
 
+        end_pos = translate_ending(range.end)
         return (begin_pos...end_pos) if begin_pos && end_pos
 
         begin_pos = translate_relative(range.begin)

@@ -47,40 +47,58 @@ module ERBLint
           tag = BetterHtml::Tree::Tag.from_node(node)
 
           if tag.closing?
-            emit(node.loc.source, node.loc.begin_pos, "}", ";")
+            emit(node.loc.source, node.loc.begin_pos, "}")
+            @output << ";"
           elsif !tag.self_closing?
-            emit(node.loc.source, node.loc.begin_pos, "__tag", "{")
+            emit(node.loc.source, node.loc.begin_pos, "__tag")
+            @output << "{"
           end
         end
 
         def visit_erb(node)
           _, _, code_node, = *node
           code = code_node.loc.source
-          len = code.size
+          is_multiline = code.start_with?("\n")
+          leading_ws, code, trailing_ws = ws_split(code)
 
-          code.lstrip!
-          leading_ws_len = len - code.size
-          code.rstrip!
-          trailing_ws_len = len - code.size - leading_ws_len
+          if is_multiline
+            @output << "begin"
+
+            @source_map.add(
+              origin: node.loc.begin_pos...(code_node.loc.begin_pos + leading_ws.size),
+              dest: @output.size...(@output.size + leading_ws.size)
+            )
+
+            @output << leading_ws
+          else
+            @source_map.add(
+              origin: node.loc.begin_pos...(code_node.loc.begin_pos + leading_ws.size),
+              dest: @output.size...@output.size
+            )
+          end
 
           @source_map.add(
-            origin: node.loc.begin_pos...(code_node.loc.begin_pos + leading_ws_len),
-            dest: @output.size...@output.size
-          )
-
-          code_loc = code_node.loc
-
-          @source_map.add(
-            origin: (code_loc.begin_pos + leading_ws_len)...(code_loc.end_pos - trailing_ws_len),
+            origin: (code_node.loc.begin_pos + leading_ws.size)...(code_node.loc.end_pos - trailing_ws.size),
             dest: @output.size...(@output.size + code.size)
           )
 
           @output << code
 
-          @source_map.add(
-            origin: (code_node.loc.end_pos - trailing_ws_len)...node.loc.end_pos,
-            dest: @output.size...@output.size
-          )
+          if is_multiline
+            @source_map.add(
+              origin: (code_node.loc.end_pos - trailing_ws.size)...node.loc.end_pos,
+              dest: @output.size...(@output.size + trailing_ws.size)
+            )
+
+            @output << trailing_ws
+            @output << ";" unless code_node.loc.source.end_with?("\n")
+            @output << "end;"
+          else
+            @source_map.add(
+              origin: (code_node.loc.end_pos - trailing_ws.size)...node.loc.end_pos,
+              dest: @output.size...@output.size
+            )
+          end
         end
 
         def ws_split(str)
@@ -98,19 +116,14 @@ module ERBLint
             if child_node.is_a?(String)
               leading_ws, text, trailing_ws = ws_split(child_node)
 
-              parts = [
-                [leading_ws, [leading_ws]],
-                [text, text.empty? ? [""] : ["__text", ";"]],
-                [trailing_ws, [trailing_ws]]
-              ]
+              pos = emit(leading_ws, pos, leading_ws) unless leading_ws.empty?
 
-              parts.each do |origin_part, dest_parts|
-                unless origin_part.empty?
-                  emit(origin_part, pos, *dest_parts)
-                end
-
-                pos += origin_part.size
+              unless text.empty?
+                pos = emit(text, pos, "__text")
+                @output << ";"
               end
+
+              emit(trailing_ws, pos, trailing_ws) unless trailing_ws.empty?
             else
               visit(child_node)
               pos += child_node.loc.source.size
@@ -118,20 +131,19 @@ module ERBLint
           end
         end
 
-        def emit(origin_str, origin_begin, *dest_strs)
-          dest_strs.each do |dest_str|
-            @source_map.add(
-              origin: origin_begin...(origin_begin + origin_str.size),
-              dest: @output.size...(@output.size + dest_str.size)
-            )
+        def emit(origin_str, origin_begin, dest_str)
+          @source_map.add(
+            origin: origin_begin...(origin_begin + origin_str.size),
+            dest: @output.size...(@output.size + dest_str.size)
+          )
 
-            @output << dest_str
-            origin_begin += origin_str.size
-          end
+          @output << dest_str
+          origin_begin + origin_str.size
         end
 
         def visit_comment(node)
-          emit(node.loc.source, node.loc.begin_pos, "__comment", ";")
+          emit(node.loc.source, node.loc.begin_pos, "__comment")
+          @output << ";"
         end
 
         def visit_children(node)
@@ -144,6 +156,7 @@ module ERBLint
       class ConfigSchema < LinterConfig
         INDENTATION_WIDTH_DEFAULTS = RuboCop::ConfigLoader.default_configuration["Layout/IndentationWidth"]
         BLOCK_ALIGNMENT_DEFAULTS = RuboCop::ConfigLoader.default_configuration["Layout/BlockAlignment"]
+        BEGIN_END_ALIGNMENT_DEFAULTS = RuboCop::ConfigLoader.default_configuration["Layout/BeginEndAlignment"]
 
         property(
           :width,
@@ -157,6 +170,12 @@ module ERBLint
           accepts: BLOCK_ALIGNMENT_DEFAULTS["SupportedStylesAlignWith"],
           default: BLOCK_ALIGNMENT_DEFAULTS["EnforcedStyleAlignWith"]
         )
+
+        property(
+          :enforced_style_begin_end_align_with,
+          accepts: BEGIN_END_ALIGNMENT_DEFAULTS["SupportedStylesAlignWith"],
+          default: BEGIN_END_ALIGNMENT_DEFAULTS["EnforcedStyleAlignWith"]
+        )
       end
       self.config_schema = ConfigSchema
 
@@ -168,6 +187,10 @@ module ERBLint
         "Layout/BlockAlignment" => {
           "EnforcedStyleAlignWith" => :enforced_style_block_align_with,
         },
+
+        "Layout/BeginEndAlignment" => {
+          "EnforcedStyleAlignWith" => :enforced_style_begin_end_align_with
+        }
       }
 
       SCHEMA_TO_COP_MAP.freeze
@@ -204,7 +227,7 @@ module ERBLint
           lambda do |corrector|
             rubocop_correction.as_nested_actions.each do |(action, range, *replacement_args)|
               if (origin_range = source_map.translate(range.to_range))
-                corrector.send(action, processed_source.to_source_range(origin_range), *replacement_args) rescue binding.pry
+                corrector.send(action, processed_source.to_source_range(origin_range), *replacement_args)
               end
             end
           end
@@ -284,6 +307,7 @@ module ERBLint
           ::RuboCop::Cop::Layout::IndentationWidth,
           ::RuboCop::Cop::Layout::IndentationConsistency,
           ::RuboCop::Cop::Layout::BlockAlignment,
+          ::RuboCop::Cop::Layout::BeginEndAlignment,
         ])
       end
 
