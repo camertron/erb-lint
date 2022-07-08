@@ -18,10 +18,7 @@ module ERBLint
         end_pos = translate_ending(range.end)
         return (begin_pos...end_pos) if begin_pos && end_pos
 
-        begin_pos = translate_relative(range.begin)
-        end_pos = translate_relative(range.end)
-
-        return (begin_pos...end_pos) if begin_pos && end_pos
+        translate_relative(range)
       end
 
       def translate_beginning(begin_pos)
@@ -42,13 +39,13 @@ module ERBLint
 
       private
 
-      def translate_relative(dest_point)
+      def translate_relative(dest_sub_range)
         @map.each_pair do |dest_range, origin_range|
           next if dest_range.size != origin_range.size
 
-          if dest_point >= dest_range.begin && dest_point <= dest_range.end
+          if dest_sub_range.begin >= dest_range.begin && dest_sub_range.end <= dest_range.end
             offset = origin_range.begin - dest_range.begin
-            return dest_point + offset
+            return (dest_sub_range.begin + offset)...(dest_sub_range.end + offset)
           end
         end
 

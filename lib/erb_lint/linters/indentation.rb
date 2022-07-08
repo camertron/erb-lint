@@ -51,7 +51,7 @@ module ERBLint
             @output << ";"
           elsif !tag.self_closing?
             emit(node.loc.source, node.loc.begin_pos, "__tag")
-            @output << "{"
+            @output << " {"
           end
         end
 
