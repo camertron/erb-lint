@@ -123,7 +123,7 @@ module ERBLint
                 @output << ";"
               end
 
-              emit(trailing_ws, pos, trailing_ws) unless trailing_ws.empty?
+              pos = emit(trailing_ws, pos, trailing_ws) unless trailing_ws.empty?
             else
               visit(child_node)
               pos += child_node.loc.source.size
