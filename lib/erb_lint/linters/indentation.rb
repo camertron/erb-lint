@@ -157,6 +157,8 @@ module ERBLint
         INDENTATION_WIDTH_DEFAULTS = RuboCop::ConfigLoader.default_configuration["Layout/IndentationWidth"]
         BLOCK_ALIGNMENT_DEFAULTS = RuboCop::ConfigLoader.default_configuration["Layout/BlockAlignment"]
         BEGIN_END_ALIGNMENT_DEFAULTS = RuboCop::ConfigLoader.default_configuration["Layout/BeginEndAlignment"]
+        END_ALIGNMENT_DEFAULTS = RuboCop::ConfigLoader.default_configuration["Layout/EndAlignment"]
+        ELSE_ALIGNMENT_DEFAULTS = RuboCop::ConfigLoader.default_configuration["Layout/ElseAlignment"]
 
         property(
           :width,
@@ -176,6 +178,18 @@ module ERBLint
           accepts: BEGIN_END_ALIGNMENT_DEFAULTS["SupportedStylesAlignWith"],
           default: BEGIN_END_ALIGNMENT_DEFAULTS["EnforcedStyleAlignWith"]
         )
+
+        property(
+          :enforced_style_end_align_with,
+          accepts: END_ALIGNMENT_DEFAULTS["SupportedStylesAlignWith"],
+          default: END_ALIGNMENT_DEFAULTS["EnforcedStyleAlignWith"]
+        )
+
+        property(
+          :enforced_style_else_align_with,
+          accepts: ELSE_ALIGNMENT_DEFAULTS["SupportedStylesAlignWith"],
+          default: ELSE_ALIGNMENT_DEFAULTS["EnforcedStyleAlignWith"]
+        )
       end
       self.config_schema = ConfigSchema
 
@@ -190,7 +204,15 @@ module ERBLint
 
         "Layout/BeginEndAlignment" => {
           "EnforcedStyleAlignWith" => :enforced_style_begin_end_align_with
-        }
+        },
+
+        "Layout/EndAlignment" => {
+          "EnforcedStyleAlignWith" => :enforced_style_end_align_with
+        },
+
+        "Layout/ElseAlignment" => {
+          "EnforcedStyleAlignWith" => :enforced_style_else_align_with
+        },
       }
 
       SCHEMA_TO_COP_MAP.freeze
@@ -308,6 +330,8 @@ module ERBLint
           ::RuboCop::Cop::Layout::IndentationConsistency,
           ::RuboCop::Cop::Layout::BlockAlignment,
           ::RuboCop::Cop::Layout::BeginEndAlignment,
+          ::RuboCop::Cop::Layout::EndAlignment,
+          ::RuboCop::Cop::Layout::ElseAlignment,
         ])
       end
 
