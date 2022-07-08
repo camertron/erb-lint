@@ -31,6 +31,8 @@ module ERBLint
         def initialize
           @output = +""
           @source_map = ::ERBLint::Utils::SourceMap.new
+          @inside_pre = false
+          @tag_stack = []
         end
 
         def visit(node)
@@ -45,17 +47,38 @@ module ERBLint
 
         def visit_tag(node)
           tag = BetterHtml::Tree::Tag.from_node(node)
+          source = node.location.source_buffer.source
 
           if tag.closing?
+            if @tag_stack.pop == "pre"
+              @inside_pre = false
+
+              if (idx = source.rindex(/[[:space:]&&[^\r\n]]*\r?\n/, node.location.begin_pos))
+                leading_ws = source[idx...node.location.begin_pos]
+                emit(leading_ws, idx, leading_ws)
+              end
+            end
+
             emit(node.loc.source, node.loc.begin_pos, "}")
             @output << ";"
           elsif !tag.self_closing?
+            @tag_stack.push(tag.name)
             emit(node.loc.source, node.loc.begin_pos, "__tag")
             @output << " {"
+
+            if tag.name == "pre"
+              @inside_pre = true
+
+              if (idx = source.index(/[[:space:]&&[^\r\n]]*\r?\n/, node.location.end_pos + 1))
+                @output << source[node.location.end_pos...idx]
+              end
+            end
           end
         end
 
         def visit_erb(node)
+          return if @inside_pre
+
           _, _, code_node, = *node
           code = code_node.loc.source
           is_multiline = code.start_with?("\n")
@@ -110,6 +133,8 @@ module ERBLint
         end
 
         def visit_text(node)
+          return if @inside_pre
+
           pos = node.loc.begin_pos
 
           node.children.each do |child_node|
@@ -142,6 +167,8 @@ module ERBLint
         end
 
         def visit_comment(node)
+          return if @inside_pre
+
           emit(node.loc.source, node.loc.begin_pos, "__comment")
           @output << ";"
         end
