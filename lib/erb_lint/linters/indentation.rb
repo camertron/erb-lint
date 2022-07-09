@@ -382,8 +382,11 @@ module ERBLint
         end
 
         origin_loc = source_map.translate(rubocop_offense.location.to_range)
+
         unless origin_loc
           begin_pos = source_map.translate_beginning(rubocop_offense.location.begin_pos)
+          return unless begin_pos
+
           origin_loc = begin_pos...begin_pos
         end
 
