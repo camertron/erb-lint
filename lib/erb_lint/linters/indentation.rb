@@ -59,8 +59,8 @@ module ERBLint
               end
             end
 
-            emit(node.loc.source, node.loc.begin_pos, "}")
-            @output << ";"
+            pos = emit(node.loc.source, node.loc.begin_pos, "}")
+            emit("", pos, ";")
           elsif !tag.self_closing?
             @tag_stack.push(tag.name)
             emit(node.loc.source, node.loc.begin_pos, "__tag")
@@ -145,7 +145,7 @@ module ERBLint
 
               unless text.empty?
                 pos = emit(text, pos, "__text")
-                @output << ";"
+                pos = emit("", pos, ";")
               end
 
               pos = emit(trailing_ws, pos, trailing_ws) unless trailing_ws.empty?
@@ -359,7 +359,6 @@ module ERBLint
           ::RuboCop::Cop::Layout::BeginEndAlignment,
           ::RuboCop::Cop::Layout::EndAlignment,
           ::RuboCop::Cop::Layout::ElseAlignment,
-          ::RuboCop::Cop::Layout::MultilineBlockLayout,
         ])
       end
 
