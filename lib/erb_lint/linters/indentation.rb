@@ -359,6 +359,7 @@ module ERBLint
           ::RuboCop::Cop::Layout::BeginEndAlignment,
           ::RuboCop::Cop::Layout::EndAlignment,
           ::RuboCop::Cop::Layout::ElseAlignment,
+          ::RuboCop::Cop::Layout::MultilineBlockLayout,
         ])
       end
 
