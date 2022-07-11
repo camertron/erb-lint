@@ -20,6 +20,9 @@ module ERBLint
       end
 
       class IRTranspiler
+        # copied from Rails: action_view/template/handlers/erb/erubi.rb
+        BLOCK_EXPR = /\s*((\s+|\))do|\{)(\s*\|[^|]*\|)?\s*\Z/
+
         def self.transpile(ast)
           transpiler = new
           transpiler.visit(ast)
@@ -106,6 +109,7 @@ module ERBLint
           )
 
           @output << code
+          @output << ";" if code =~ BLOCK_EXPR
 
           if is_multiline
             @source_map.add(
