@@ -58,16 +58,18 @@ module ERBLint
           unless on_own_line?(parent.closing_node)
             add_offense(
               parent.closing_node.loc,
-              "closing tag should be on its own line"
+              "Closing tag should be on its own line"
             )
           end
         end
 
         parent.children.each do |child|
-          unless on_own_line?(child)
+          next if child.type == :text
+
+          unless on_own_line?(child) || preceeded_by_text?(child, parent)
             add_offense(
               child.loc,
-              "#{child.type} should be on its own line"
+              "Opening tag should be on its own line"
             )
           end
 
@@ -79,6 +81,27 @@ module ERBLint
         if (line_start = node.loc.source_buffer.source.rindex(/\r?\n/, node.loc.begin_pos))
           node.loc.with(begin_pos: line_start, end_pos: node.loc.begin_pos).source =~ /\A\s*\z/
         end
+      end
+
+      def preceeded_by_text?(tag, parent)
+        text_node = find_preceeding_text_node(tag, parent)
+
+        return false unless text_node
+        return false if text_node.loc.source =~ /\A\s*\z/
+
+        text_node.loc.last_line == tag.loc.first_line
+      end
+
+      def find_preceeding_text_node(tag, parent)
+        idx = parent.children.index(tag)
+
+        (idx - 1).downto(0) do |i|
+          if parent.children[i].type == :text
+            return parent.children[i]
+          end
+        end
+
+        nil
       end
 
       def build_document(processed_source)
