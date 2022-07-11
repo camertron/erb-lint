@@ -82,7 +82,14 @@ module ERBLint
         def visit_erb(node)
           return if @inside_pre
 
-          _, _, code_node, = *node
+          indicator, _, code_node, = *node
+
+          if indicator.loc.source == "#"
+            emit(node.loc.source, node.loc.begin_pos, "__comment")
+            @output << ";"
+            return
+          end
+
           code = code_node.loc.source
           is_multiline = code.start_with?("\n")
           leading_ws, code, trailing_ws = ws_split(code)

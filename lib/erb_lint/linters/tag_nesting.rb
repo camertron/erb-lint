@@ -64,8 +64,6 @@ module ERBLint
         end
 
         parent.children.each do |child|
-          next if child.type == :text
-
           unless on_own_line?(child) || preceeded_by_text?(child, parent)
             add_offense(
               child.loc,
