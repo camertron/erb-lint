@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "pry-byebug"
+require "erb_lint/linters/self_closing_tag"
 require "erb_lint/utils/source_map"
 require "erb_lint/utils/source_map_corrector"
 
@@ -22,6 +23,8 @@ module ERBLint
       class IRTranspiler
         # copied from Rails: action_view/template/handlers/erb/erubi.rb
         BLOCK_EXPR = /\s*((\s+|\))do|\{)(\s*\|[^|]*\|)?\s*\Z/
+
+        SELF_CLOSING_TAGS = ERBLint::Linters::SelfClosingTag::SELF_CLOSING_TAGS
 
         def self.transpile(ast)
           transpiler = new
@@ -53,6 +56,10 @@ module ERBLint
           source = node.location.source_buffer.source
 
           if tag.closing?
+            # Ignore closing tags for void elements like <input>. They are technically invalid
+            # HTML, but we shouldn't let them monkey with the transpilation process if they exist.
+            return if SELF_CLOSING_TAGS.include?(tag.name)
+
             if @tag_stack.pop == "pre"
               @inside_pre = false
 
@@ -67,7 +74,10 @@ module ERBLint
           elsif !tag.self_closing?
             @tag_stack.push(tag.name)
             emit(node.loc.source, node.loc.begin_pos, "__tag")
-            @output << " {"
+
+            # So-called "void" elements like <input>, <img>, etc, shouldn't have a closing
+            # tag, but are also not self-closing. They have only an opening tag.
+            @output << " {" unless SELF_CLOSING_TAGS.include?(tag.name)
 
             if tag.name == "pre"
               @inside_pre = true
@@ -84,7 +94,7 @@ module ERBLint
 
           indicator, _, code_node, = *node
 
-          if indicator.loc.source == "#"
+          if indicator && indicator.loc.source == "#"
             emit(node.loc.source, node.loc.begin_pos, "__comment")
             @output << ";"
             return
