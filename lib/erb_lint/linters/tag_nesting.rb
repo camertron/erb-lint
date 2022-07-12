@@ -30,6 +30,10 @@ module ERBLint
         :tag
       end
 
+      def name
+        node.name
+      end
+
       def loc
         node.loc
       end
@@ -56,6 +60,7 @@ module ERBLint
 
       def add_offenses_in(parent)
         return if parent.type == :text
+        return if parent.name == "pre"
         return unless parent.contains_nested_tag?
 
         if parent.closing_node
