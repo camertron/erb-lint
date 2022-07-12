@@ -70,11 +70,15 @@ module ERBLint
             emit("", pos, ";")
           elsif !tag.self_closing?
             @tag_stack.push(tag.name)
-            emit(node.loc.source, node.loc.begin_pos, "__tag")
+            pos = emit(node.loc.source, node.loc.begin_pos, "__tag")
 
             # So-called "void" elements like <input>, <img>, etc, shouldn't have a closing
             # tag, but are also not self-closing. They have only an opening tag.
-            @output << " {" unless SELF_CLOSING_TAGS.include?(tag.name)
+            if SELF_CLOSING_TAGS.include?(tag.name)
+              emit("", pos, ";")
+            else
+              emit("", pos, " {")
+            end
 
             if tag.name == "pre"
               @inside_pre = true

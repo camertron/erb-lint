@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "erb_lint/linters/self_closing_tag"
+
 module ERBLint
   module Linters
     class Document
@@ -35,6 +37,8 @@ module ERBLint
 
     # Ensures HTML tags are properly nested.
     class TagNesting < Linter
+      SELF_CLOSING_TAGS = ERBLint::Linters::SelfClosingTag::SELF_CLOSING_TAGS
+
       include LinterRegistry
 
       def run(processed_source)
@@ -119,7 +123,10 @@ module ERBLint
             else
               tag = Tag.new(tag_node)
               tag_stack.last.children << tag
-              tag_stack.push(tag)
+
+              unless SELF_CLOSING_TAGS.include?(tag_node.name)
+                tag_stack.push(tag)
+              end
             end
           else
             tag_stack.last.children << node
