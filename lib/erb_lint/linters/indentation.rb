@@ -21,9 +21,6 @@ module ERBLint
       end
 
       class IRTranspiler
-        # copied from Rails: action_view/template/handlers/erb/erubi.rb
-        BLOCK_EXPR = /\s*((\s+|\))do|\{)(\s*\|[^|]*\|)?\s*\Z/
-
         SELF_CLOSING_TAGS = ERBLint::Linters::SelfClosingTag::SELF_CLOSING_TAGS
 
         def self.transpile(ast)
@@ -126,7 +123,7 @@ module ERBLint
           )
 
           @output << code
-          @output << ";" if code =~ BLOCK_EXPR
+          @output << ";"
 
           if is_multiline
             @source_map.add(
