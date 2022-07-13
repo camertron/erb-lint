@@ -161,21 +161,30 @@ module ERBLint
 
           node.children.each do |child_node|
             if child_node.is_a?(String)
-              leading_ws, text, trailing_ws = ws_split(child_node)
-
-              pos = emit(leading_ws, pos, leading_ws) unless leading_ws.empty?
-
-              unless text.empty?
-                pos = emit(text, pos, "__text")
-                pos = emit("", pos, ";")
-              end
-
-              pos = emit(trailing_ws, pos, trailing_ws) unless trailing_ws.empty?
+              pos = emit_string(child_node, pos)
             else
               visit(child_node)
               pos += child_node.loc.source.size
             end
           end
+        end
+
+        def emit_string(origin_str, pos)
+          leading_ws, text, trailing_ws = ws_split(origin_str)
+          pos = emit(leading_ws, pos, leading_ws) unless leading_ws.empty?
+
+          if text.match(/\r?\n/)
+            text.split(/(\r?\n)/).each_slice(2) do |chunk, newline|
+              pos = emit_string(chunk, pos)
+              pos = emit(newline, pos, newline) if newline
+            end
+          elsif !text.empty?
+            pos = emit(text, pos, "__text")
+            pos = emit("", pos, ";")
+          end
+
+          pos = emit(trailing_ws, pos, trailing_ws) unless trailing_ws.empty?
+          pos
         end
 
         def emit(origin_str, origin_begin, dest_str)
