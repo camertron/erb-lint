@@ -58,8 +58,15 @@ module ERBLint
         return if parent.type == :text
         return if parent.name == "pre"
 
-        if parent.closing_node
-          if !on_own_line?(parent.closing_node) && (contains_nested_tag?(parent) || contains_multiline_text?(parent))
+        if contains_nested_tag?(parent) || contains_multiline_text?(parent)
+          if !on_own_line?(parent)
+            add_offense(
+              parent.node.loc,
+              "Opening tag should be on its own line"
+            )
+          end
+
+          if parent.closing_node && !on_own_line?(parent.closing_node)
             add_offense(
               parent.closing_node.loc,
               "Closing tag should be on its own line"
@@ -68,18 +75,11 @@ module ERBLint
         end
 
         parent.children.each_with_index do |child, idx|
-          unless on_own_line?(child)
-            if is_multiline_text?(child) && idx == 0
-              add_offense(
-                child.loc,
-                "Text should start on its own line"
-              )
-            elsif contains_nested_tag?(child) #&& !preceeded_by_text?(child, parent)
-              add_offense(
-                child.loc,
-                "#{child.type.to_s.capitalize} should start on its own line"
-              )
-            end
+          if !on_own_line?(child) && is_multiline_text?(child) && idx == 0
+            add_offense(
+              child.loc,
+              "Text should start on its own line"
+            )
           end
 
           add_offenses_in(child)
@@ -106,6 +106,8 @@ module ERBLint
       end
 
       def on_own_line?(node)
+        return true if node.loc.begin_pos == 0
+
         if (line_start = node.loc.source_buffer.source.rindex(/\r?\n/, node.loc.begin_pos))
           node.loc.with(begin_pos: line_start, end_pos: node.loc.begin_pos).source =~ /\A\s*\z/
         end
