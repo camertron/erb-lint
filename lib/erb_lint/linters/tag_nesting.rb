@@ -58,7 +58,7 @@ module ERBLint
         return if parent.type == :text
         return if parent.name == "pre"
 
-        if contains_nested_tag?(parent) || contains_multiline_text?(parent)
+        if should_be_on_own_line?(parent)
           if !on_own_line?(parent)
             add_offense(
               parent.node.loc,
@@ -66,13 +66,15 @@ module ERBLint
             )
           end
 
-          first_child = parent.children.first
-
-          if first_child && !on_own_line?(first_child)
-            add_offense(
-              first_child.loc,
-              "#{first_child.type.to_s.capitalize} should start on its own line"
-            )
+          if (first_child = parent.children.first)
+            # Check will_add_newline? and bail if true since the recursive call below
+            # will add a newline to this child later.
+            if !on_own_line?(first_child) && !will_add_newline?(first_child)
+              add_offense(
+                first_child.loc,
+                "#{first_child.type.to_s.capitalize} should start on its own line"
+              )
+            end
           end
 
           if parent.closing_node && !on_own_line?(parent.closing_node)
@@ -87,6 +89,12 @@ module ERBLint
           add_offenses_in(child)
         end
       end
+
+      def should_be_on_own_line?(node)
+        contains_nested_tag?(node) || contains_multiline_text?(node)
+      end
+
+      alias will_add_newline? should_be_on_own_line?
 
       def contains_nested_tag?(node)
         return false if node.type == :text
