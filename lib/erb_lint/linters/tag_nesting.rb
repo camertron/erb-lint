@@ -110,7 +110,7 @@ module ERBLint
       def on_own_line?(node)
         return true if node.loc.begin_pos == 0
 
-        if (line_start = node.loc.source_buffer.source.rindex(/\r?\n/, node.loc.begin_pos))
+        if (line_start = node.loc.source_buffer.source.rindex(/\A|\r?\n/, node.loc.begin_pos))
           node.loc.with(begin_pos: line_start, end_pos: node.loc.begin_pos).source =~ /\A\s*\z/
         end
       end
