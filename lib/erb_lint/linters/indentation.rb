@@ -200,6 +200,11 @@ module ERBLint
         def visit_comment(node)
           return if @inside_pre
 
+          # Ignore comments that appear at the end of some other content, since appearing eg.
+          # between tag curly braces will cause the rest of the tag body to be indented to
+          # the level of the comment, which is wrong.
+          return unless on_own_line?(node)
+
           emit(node.loc.source, node.loc.begin_pos, "__comment")
           @output << ";"
         end
@@ -207,6 +212,16 @@ module ERBLint
         def visit_children(node)
           node.children.each do |child_node|
             visit(child_node) if child_node.is_a?(BetterHtml::AST::Node)
+          end
+        end
+
+        private
+
+        def on_own_line?(node)
+          return true if node.loc.begin_pos == 0
+
+          if (line_start = node.loc.source_buffer.source.rindex(/\A|\r?\n/, node.loc.begin_pos))
+            node.loc.with(begin_pos: line_start, end_pos: node.loc.begin_pos).source =~ /\A\s*\z/
           end
         end
       end
