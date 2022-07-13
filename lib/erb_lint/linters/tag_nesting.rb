@@ -59,7 +59,7 @@ module ERBLint
         return if parent.name == "pre"
 
         if parent.closing_node
-          unless on_own_line?(parent.closing_node)
+          if !on_own_line?(parent.closing_node) && (contains_nested_tag?(parent) || contains_multiline_text?(parent))
             add_offense(
               parent.closing_node.loc,
               "Closing tag should be on its own line"
@@ -68,13 +68,13 @@ module ERBLint
         end
 
         parent.children.each_with_index do |child, idx|
-          if !on_own_line?(child)
+          unless on_own_line?(child)
             if is_multiline_text?(child) && idx == 0
               add_offense(
                 child.loc,
                 "Text should start on its own line"
               )
-            elsif !preceeded_by_text?(child, parent)
+            elsif contains_nested_tag?(child) #&& !preceeded_by_text?(child, parent)
               add_offense(
                 child.loc,
                 "#{child.type.to_s.capitalize} should start on its own line"
@@ -84,6 +84,18 @@ module ERBLint
 
           add_offenses_in(child)
         end
+      end
+
+      def contains_nested_tag?(node)
+        return false if node.type == :text
+
+        node.children.any? { |node| node.type == :tag }
+      end
+
+      def contains_multiline_text?(node)
+        return false if node.type == :text
+
+        node.children.any? { |child| is_multiline_text?(child) }
       end
 
       def is_multiline_text?(node)
