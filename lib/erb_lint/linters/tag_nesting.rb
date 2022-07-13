@@ -66,6 +66,15 @@ module ERBLint
             )
           end
 
+          first_child = parent.children.first
+
+          if first_child && !on_own_line?(first_child)
+            add_offense(
+              first_child.loc,
+              "#{first_child.type.to_s.capitalize} should start on its own line"
+            )
+          end
+
           if parent.closing_node && !on_own_line?(parent.closing_node)
             add_offense(
               parent.closing_node.loc,
@@ -75,13 +84,6 @@ module ERBLint
         end
 
         parent.children.each_with_index do |child, idx|
-          if !on_own_line?(child) && is_multiline_text?(child) && idx == 0
-            add_offense(
-              child.loc,
-              "Text should start on its own line"
-            )
-          end
-
           add_offenses_in(child)
         end
       end
