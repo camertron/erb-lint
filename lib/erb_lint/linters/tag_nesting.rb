@@ -10,6 +10,10 @@ module ERBLint
       def initialize(children = [])
         @children = children
       end
+
+      def name
+        nil
+      end
     end
 
     class Tag
@@ -155,7 +159,13 @@ module ERBLint
             if tag_node.closing?
               break if tag_stack.empty?
 
-              tag_stack.pop.closing_node = tag_node
+              parent = tag_stack.last
+
+              if parent && parent.name == tag_node.name
+                parent.closing_node = tag_node
+              end
+
+              tag_stack.pop
             elsif tag_node.self_closing?
               tag_stack.last.children << Tag.new(tag_node)
             else
@@ -167,7 +177,9 @@ module ERBLint
               end
             end
           else
-            tag_stack.last.children << node
+            if (parent = tag_stack.last)
+              parent.children << node
+            end
           end
         end
 
