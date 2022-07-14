@@ -70,7 +70,26 @@ module ERBLint
             emit("", pos, ";")
           elsif !tag.self_closing?
             @tag_stack.push(tag.name)
-            pos = emit(node.loc.source, node.loc.begin_pos, "__tag")
+
+            tag_loc = node.loc.with(end_pos: tag.name_node.loc.end_pos)
+            body_loc = tag.loc.with(begin_pos: tag.name_node.loc.end_pos, end_pos: tag.loc.end_pos - 1)
+
+            pos = emit(tag_loc, node.loc.begin_pos, "__tag")
+
+            if body_loc.first_line < body_loc.last_line
+              pos = emit("", pos, "(")
+
+              body_loc.source.split(/(\r?\n)/).each_slice(2) do |body_line, newline|
+                pos = emit_string(body_line, pos) do |text, pos|
+                  pos = emit(text, pos, "__arg")
+                  emit("", pos, ",")
+                end
+
+                pos = emit(newline, pos, newline) if newline
+              end
+
+              pos = emit("", pos, ")")
+            end
 
             # So-called "void" elements like <input>, <img>, etc, shouldn't have a closing
             # tag, but are also not self-closing. They have only an opening tag.
@@ -161,7 +180,10 @@ module ERBLint
 
           node.children.each do |child_node|
             if child_node.is_a?(String)
-              pos = emit_string(child_node, pos)
+              pos = emit_string(child_node, pos) do |text, pos|
+                pos = emit(text, pos, "__text")
+                emit("", pos, ";")
+              end
             else
               visit(child_node)
               pos += child_node.loc.source.size
@@ -179,8 +201,7 @@ module ERBLint
               pos = emit(newline, pos, newline) if newline
             end
           elsif !text.empty?
-            pos = emit(text, pos, "__text")
-            pos = emit("", pos, ";")
+            pos = yield(text, pos)
           end
 
           pos = emit(trailing_ws, pos, trailing_ws) unless trailing_ws.empty?
@@ -202,7 +223,7 @@ module ERBLint
 
           # Ignore comments that appear at the end of some other content, since appearing eg.
           # between tag curly braces will cause the rest of the tag body to be indented to
-          # the level of the comment, which is wrong.
+          # the same level as the comment, which is wrong.
           return unless on_own_line?(node)
 
           emit(node.loc.source, node.loc.begin_pos, "__comment")
@@ -405,6 +426,8 @@ module ERBLint
           ::RuboCop::Cop::Layout::BeginEndAlignment,
           ::RuboCop::Cop::Layout::EndAlignment,
           ::RuboCop::Cop::Layout::ElseAlignment,
+          ::RuboCop::Cop::Layout::FirstArgumentIndentation,
+          ::RuboCop::Cop::Layout::ArgumentAlignment,
         ])
       end
 
