@@ -191,13 +191,13 @@ module ERBLint
           end
         end
 
-        def emit_string(origin_str, pos)
+        def emit_string(origin_str, pos, &block)
           leading_ws, text, trailing_ws = ws_split(origin_str)
           pos = emit(leading_ws, pos, leading_ws) unless leading_ws.empty?
 
           if text.match(/\r?\n/)
             text.split(/(\r?\n)/).each_slice(2) do |chunk, newline|
-              pos = emit_string(chunk, pos)
+              pos = emit_string(chunk, pos, &block)
               pos = emit(newline, pos, newline) if newline
             end
           elsif !text.empty?
@@ -428,6 +428,7 @@ module ERBLint
           ::RuboCop::Cop::Layout::ElseAlignment,
           ::RuboCop::Cop::Layout::FirstArgumentIndentation,
           ::RuboCop::Cop::Layout::ArgumentAlignment,
+          ::RuboCop::Cop::Layout::FirstMethodArgumentLineBreak,
         ])
       end
 
