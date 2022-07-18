@@ -3,10 +3,9 @@
 module ERBLint
   module Utils
     class SourceMapCorrector
-      def initialize(processed_source, corrector, source_map)
-        @processed_source = processed_source
+      def initialize(ir, corrector)
+        @ir = ir
         @corrector = corrector
-        @source_map = source_map
       end
 
       def remove(range)
@@ -37,23 +36,22 @@ module ERBLint
         @corrector.remove_trailing(translate_range(range), size)
       end
 
-      def translate_range(node_or_range)
-        range = to_range(node_or_range)
-        @processed_source.to_source_range(@source_map.translate(range))
+      def translate_range(node_or_source_range)
+        ir.translate(to_source_range(node_or_source_range))
       end
 
       private
 
-      def to_range(node_or_range)
-        case node_or_range
+      def to_source_range(node_or_source_range)
+        case node_or_source_range
         when ::RuboCop::AST::Node, ::Parser::Source::Comment
-          node_or_range.loc.expression.to_range
+          node_or_source_range.loc.expression
         when ::Parser::Source::Range
-          node_or_range.to_range
+          node_or_source_range.to_range
         else
           raise TypeError,
             "Expected a Parser::Source::Range, Comment or " \
-              "Rubocop::AST::Node, got #{node_or_range.class}"
+              "Rubocop::AST::Node, got #{node_or_source_range.class}"
         end
       end
     end

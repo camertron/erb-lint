@@ -12,6 +12,10 @@ module ERBLint
       end
 
       def translate(range)
+        if (origin_range = @map[range])
+          return origin_range
+        end
+
         begin_pos = translate_beginning(range.begin)
         return (begin_pos...begin_pos) if begin_pos && range.size == 0
 

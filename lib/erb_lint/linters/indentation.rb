@@ -5,6 +5,8 @@ require "erb_lint/linters/self_closing_tag"
 require "erb_lint/utils/source_map"
 require "erb_lint/utils/source_map_corrector"
 
+require "erb_lint/linters/indentation/block_alignment"
+
 module ERBLint
   module Linters
     # Warns when HTML and ERB tags are not indented properly.
@@ -12,21 +14,51 @@ module ERBLint
       include LinterRegistry
 
       class IR
-        attr_reader :source, :source_map
+        attr_reader :original_source, :ir_source, :source_map
 
-        def initialize(source, source_map)
-          @source = source
+        def initialize(original_source, ir_source, source_map)
+          @original_source = original_source
+          @ir_source = ir_source
           @source_map = source_map
+        end
+
+        def translate(ir_range)
+          if (original_range = source_map.translate(ir_range.to_range))
+            original_source.to_source_range(original_range)
+          end
+        end
+
+        # debugging tool
+        def highlight(original_range)
+          original_source.file_content.dup.tap do |result|
+            result.insert(original_range.end_pos, "]")
+            result.insert(original_range.begin_pos, "[")
+          end
+        end
+
+        def translate_beginning(begin_pos)
+          source_map.translate_beginning(begin_pos)
         end
       end
 
       class IRTranspiler
         SELF_CLOSING_TAGS = ERBLint::Linters::SelfClosingTag::SELF_CLOSING_TAGS
 
-        def self.transpile(ast)
+        def self.transpile(original_source, target_ruby_version)
           transpiler = new
-          transpiler.visit(ast)
-          IR.new(transpiler.output, transpiler.source_map)
+          transpiler.visit(original_source.ast)
+
+          ir_source = ::RuboCop::ProcessedSource.new(
+            transpiler.output,
+            target_ruby_version,
+            "(intermediate)"
+          )
+
+          IR.new(
+            original_source,
+            ir_source,
+            transpiler.source_map
+          )
         end
 
         attr_reader :source_map, :output
@@ -76,21 +108,6 @@ module ERBLint
 
             pos = emit(tag_loc, node.loc.begin_pos, "__tag")
 
-            if body_loc.first_line < body_loc.last_line
-              pos = emit("", pos, "(")
-
-              body_loc.source.split(/(\r?\n)/).each_slice(2) do |body_line, newline|
-                pos = emit_string(body_line, pos) do |text, pos|
-                  pos = emit(text, pos, "__arg")
-                  emit("", pos, ",")
-                end
-
-                pos = emit(newline, pos, newline) if newline
-              end
-
-              pos = emit("", pos, ")")
-            end
-
             # So-called "void" elements like <input>, <img>, etc, shouldn't have a closing
             # tag, but are also not self-closing. They have only an opening tag.
             if SELF_CLOSING_TAGS.include?(tag.name)
@@ -128,20 +145,15 @@ module ERBLint
             @output << "begin"
 
             @source_map.add(
-              origin: node.loc.begin_pos...(code_node.loc.begin_pos + leading_ws.size),
+              origin: code_node.loc.begin_pos...(code_node.loc.begin_pos + leading_ws.size),
               dest: @output.size...(@output.size + leading_ws.size)
             )
 
             @output << leading_ws
-          else
-            @source_map.add(
-              origin: node.loc.begin_pos...(code_node.loc.begin_pos + leading_ws.size),
-              dest: @output.size...@output.size
-            )
           end
 
           @source_map.add(
-            origin: (code_node.loc.begin_pos + leading_ws.size)...(code_node.loc.end_pos - trailing_ws.size),
+            origin: node.loc.to_range,
             dest: @output.size...(@output.size + code.size)
           )
 
@@ -150,18 +162,13 @@ module ERBLint
 
           if is_multiline
             @source_map.add(
-              origin: (code_node.loc.end_pos - trailing_ws.size)...node.loc.end_pos,
+              origin: (code_node.loc.end_pos - trailing_ws.size)...code_node.loc.end_pos,
               dest: @output.size...(@output.size + trailing_ws.size)
             )
 
             @output << trailing_ws
             @output << ";" unless code_node.loc.source.end_with?("\n")
             @output << "end;"
-          else
-            @source_map.add(
-              origin: (code_node.loc.end_pos - trailing_ws.size)...node.loc.end_pos,
-              dest: @output.size...@output.size
-            )
           end
         end
 
@@ -321,40 +328,43 @@ module ERBLint
         end
       end
 
-      def run(processed_source)
-        ir = IRTranspiler.transpile(processed_source.ast)
-        ir_source = rubocop_processed_source(ir.source, "(intermediate)")
+      def run(original_source)
+        ir = IRTranspiler.transpile(original_source, @rubocop_config.target_ruby_version)
+        team = build_team
 
-        each_offense_in(ir_source, build_team) do |offense, correction|
-          add_offense(processed_source, offense, correction, ir.source_map)
+        block_alignment_cop = team.cops.find { |cop| cop.is_a?(::ERBLint::Linters::Indentation::BlockAlignment) }
+        block_alignment_cop.bind_to(ir)
+
+        each_offense_in(ir, team) do |offense, correction|
+          add_offense(original_source, offense, correction, ir)
         end
       end
 
       if ::RuboCop::Version::STRING.to_f >= 0.87
-        def autocorrect(processed_source, offense)
+        def autocorrect(original_source, offense)
           return unless offense.context
 
           rubocop_correction = offense.context[:rubocop_correction]
           return unless rubocop_correction
 
-          source_map = offense.context[:source_map]
-          return unless source_map
+          ir = offense.context[:ir]
+          return unless ir
 
           lambda do |corrector|
-            rubocop_correction.as_nested_actions.each do |(action, range, *replacement_args)|
-              if (origin_range = source_map.translate(range.to_range))
-                corrector.send(action, processed_source.to_source_range(origin_range), *replacement_args)
+            rubocop_correction.as_nested_actions.each do |(action, ir_range, *replacement_args)|
+              if (original_range = ir.translate(ir_range))
+                corrector.send(action, original_range, *replacement_args)
               end
             end
           end
         end
       else
-        def autocorrect(processed_source, offense)
+        def autocorrect(original_source, offense)
           return unless offense.context
 
           lambda do |corrector|
             passthrough = Utils::SourceMapCorrector.new(
-              processed_source,
+              original_source,
               corrector,
               offense.context[:source_map],
             )
@@ -386,15 +396,15 @@ module ERBLint
       end
 
       if ::RuboCop::Version::STRING.to_f >= 0.87
-        def each_offense_in(source, team)
-          report = team.investigate(source)
+        def each_offense_in(ir, team)
+          report = team.investigate(ir.ir_source)
           report.offenses.each do |offense|
             yield offense, offense.corrector
           end
         end
       else
-        def each_offense_in(source, team)
-          team.inspect_file(source)
+        def each_offense_in(ir, team)
+          team.inspect_file(ir.ir_source)
 
           team.cops.each do |cop|
             correction_offset = 0
@@ -410,25 +420,15 @@ module ERBLint
         end
       end
 
-      def rubocop_processed_source(content, filename)
-        ::RuboCop::ProcessedSource.new(
-          content,
-          @rubocop_config.target_ruby_version,
-          filename
-        )
-      end
-
       def cop_classes
         @cop_classes ||= ::RuboCop::Cop::Registry.new([
           ::RuboCop::Cop::Layout::IndentationWidth,
           ::RuboCop::Cop::Layout::IndentationConsistency,
-          ::RuboCop::Cop::Layout::BlockAlignment,
+          # ::RuboCop::Cop::Layout::BlockAlignment,
+          ::ERBLint::Linters::Indentation::BlockAlignment,
           ::RuboCop::Cop::Layout::BeginEndAlignment,
           ::RuboCop::Cop::Layout::EndAlignment,
           ::RuboCop::Cop::Layout::ElseAlignment,
-          ::RuboCop::Cop::Layout::FirstArgumentIndentation,
-          ::RuboCop::Cop::Layout::ArgumentAlignment,
-          ::RuboCop::Cop::Layout::FirstMethodArgumentLineBreak,
         ])
       end
 
@@ -446,21 +446,21 @@ module ERBLint
         )
       end
 
-      def add_offense(processed_source, rubocop_offense, correction, source_map)
+      def add_offense(original_source, rubocop_offense, correction, ir)
         context = if rubocop_offense.corrected?
-          { rubocop_correction: correction, source_map: source_map }
+          { rubocop_correction: correction, ir: ir }
         end
 
-        origin_loc = source_map.translate(rubocop_offense.location.to_range)
+        origin_loc = ir.translate(rubocop_offense.location)
 
         unless origin_loc
-          begin_pos = source_map.translate_beginning(rubocop_offense.location.begin_pos)
+          begin_pos = ir.translate_beginning(rubocop_offense.location.begin_pos)
           return unless begin_pos
 
           origin_loc = begin_pos...begin_pos
         end
 
-        origin_loc = processed_source.to_source_range(origin_loc)
+        origin_loc = original_source.to_source_range(origin_loc)
 
         super(
           origin_loc,
