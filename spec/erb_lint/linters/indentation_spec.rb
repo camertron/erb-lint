@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe ERBLint::Linters::Indentation do
+describe ERBLint::Linters::Indentation::Linter do
   let(:linter_config) do
     described_class.config_schema.new
   end
@@ -47,6 +47,16 @@ describe ERBLint::Linters::Indentation do
       it { expect(subject).to(eq([])) }
     end
 
+    context "when improper indentation exists in a <pre> tag" do
+      let(:file) { <<~ERB }
+        <pre>
+        <%= foo %>
+        </pre>
+      ERB
+
+      it { expect(subject).to eq([]) }
+    end
+
     context "when a child HTML element is improperly indented" do
       let(:file) { <<~ERB }
         <div>
@@ -54,42 +64,28 @@ describe ERBLint::Linters::Indentation do
         </div>
       ERB
 
-#         let(:file) { <<~ERB }
-# <div>
-#  <span class="foo">bar</span>
-#  <% 10.times do |i| %>
-#    <%= i %>
-#  <% end %>
-#  </div>
-#         ERB
-
-      # let(:file) { <<~ERB }
-      #   <% 5.times do |i| %>
-      #   <span>foo</span>
-      #   <% end %>
-      # ERB
-
-      # let(:file) { <<~ERB }
-      #   <div>
-      #     <span class="foo">bar</span>
-      #   <% 10.times do |i| %>
-      #       <%= i %>
-      #     <% end %>
-      #   </div>
-      # ERB
-
-      # let(:file) { <<~ERB }
-      # <div class="m-1">
-      # <!-- List of plans available to the target -->
-      #   <% if !GitHub.enterprise? && error_message.include?(User::NOT_UNIQUE_LOGIN_MESSAGE) %>
-      #     Please choose another. To submit a trademark claim, please see our <a href="<%= GitHub.help_url %>/articles/github-trademark-policy/" target="_blank">Trademark Policy</a>.
-      #   <% end %>
-      # </div>
-      # ERB
-
       it do
         expect(subject).to(eq([
           build_offense(6...9, "Layout/IndentationWidth: Use 2 (not 3) spaces for indentation.", severity: :convention)
+        ]))
+      end
+    end
+
+    context "when an HTML element spans multiple lines" do
+      let(:file) { <<~ERB }
+        <span>
+          <a class="class1 class2"
+            href="foo"
+            target="_blank">
+            Link text
+          </a>
+        </span>
+      ERB
+
+      it do
+        expect(subject).to(eq([
+          build_offense(38...38, "Layout/ArgumentAlignment: Align the arguments of a method call if they span more than one line.", severity: :convention),
+          build_offense(53...67, "Layout/ArgumentAlignment: Align the arguments of a method call if they span more than one line.", severity: :convention),
         ]))
       end
     end
@@ -124,6 +120,107 @@ describe ERBLint::Linters::Indentation do
           build_offense(34...34, "Layout/IndentationWidth: Use 2 (not 0) spaces for indentation.", severity: :convention),
           build_offense(47...56, "Layout/BlockAlignment: `<% end %>` at 4, 4 is not aligned with `<% 10.times do |i| %>` at 2, 2.", severity: :convention),
         ]))
+      end
+    end
+
+    context "when a multi-line ERB statement isn't indented properly" do
+      let(:file) { <<~ERB }
+        <%
+        foo = "foo"
+        bar = "bar"
+        %>
+      ERB
+
+      it do
+        expect(subject).to(eq([
+          build_offense(3...3, "Layout/IndentationWidth: Use 2 (not 0) spaces for indentation.", severity: :convention),
+        ]))
+      end
+    end
+
+    context "when a multi-line ERB statement is indented properly" do
+      let(:file) { <<~ERB }
+        <%
+          foo = "foo"
+          bar = "bar"
+        %>
+      ERB
+
+      it { expect(subject).to eq([]) }
+    end
+
+    context "when a multi-line ERB statement that starts on the first line isn't indented properly" do
+      let(:file) { <<~ERB }
+        <% foo = "foo"
+        bar = "bar"
+        %>
+      ERB
+
+      it { expect(subject).to eq([]) }
+    end
+
+    context "when a branching ERB tag is indented by text" do
+      let(:file) { <<~ERB }
+        text <% if foo %>
+          foo
+        <% else %>
+          bar
+        <% end %>
+      ERB
+
+      it do
+        expect(subject).to(eq([
+          build_offense(20...23, "Layout/IndentationWidth: Use 2 (not -3) spaces for indentation.", severity: :convention),
+          build_offense(41...50, "Layout/EndAlignment: `end` at 5, 0 is not aligned with `if` at 1, 5.", severity: :warning),
+          build_offense(24...34, "Layout/ElseAlignment: Align `else` with `if`.", severity: :convention),
+        ]))
+      end
+    end
+
+    context "when a branching ERB tag is indented by an ERB tag on the same line" do
+      let(:file) { <<~ERB }
+        <%= text %> <% if foo %>
+          foo
+        <% else %>
+          bar
+        <% end %>
+      ERB
+
+      it "indents to the level of the first line" do
+        expect(subject).to(eq([
+          build_offense(27...42, "Layout/IndentationWidth: Use 2 (not -10) spaces for indentation.", severity: :convention),
+          build_offense(48...57, "Layout/EndAlignment: `end` at 5, 0 is not aligned with `if` at 1, 12.", severity: :warning),
+          build_offense(31...41, "Layout/ElseAlignment: Align `else` with `if`.", severity: :convention),
+        ]))
+      end
+    end
+
+    context "when a multi-line ERB statement ends with a trailing block" do
+      let(:file) { <<~ERB }
+        <%
+        foo = "foo"
+        bar do
+        %>
+          bar
+        <% end %>
+      ERB
+
+      it "does not indent" do
+        expect(subject).to eq([])
+      end
+    end
+
+    context "when a multi-line ERB statement that starts on the same line ends with a trailing block" do
+      let(:file) { <<~ERB }
+        <% foo = "foo"
+        bar do
+        %>
+          bar
+        <% end %>
+      ERB
+
+      it "does not indent" do
+        expect(subject).to eq([])
       end
     end
   end
@@ -181,6 +278,46 @@ describe ERBLint::Linters::Indentation do
             <% 10.times do |i| %>
             <% end %>
           </div>
+        ERB
+      end
+    end
+
+    context "when a branching ERB tag is indented by an ERB tag on the same line" do
+      let(:file) { <<~ERB }
+        <%= text %> <% if foo %>
+          foo
+        <% end %>
+      ERB
+
+      it "indents to the level of the first line" do
+        expect(subject).to(eq(<<~ERB))
+          <%= text %> <% if foo %>
+                        foo
+                      <% end %>
+        ERB
+      end
+    end
+
+    context "when an HTML element spans multiple lines" do
+      let(:file) { <<~ERB }
+        <span>
+          <a class="class1 class2"
+            href="foo"
+            target="_blank">
+            Link text
+          </a>
+        </span>
+      ERB
+
+      it do
+        expect(subject).to(eq(<<~ERB))
+          <span>
+            <a class="class1 class2"
+               href="foo"
+               target="_blank">
+              Link text
+            </a>
+          </span>
         ERB
       end
     end

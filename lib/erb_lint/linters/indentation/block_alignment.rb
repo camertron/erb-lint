@@ -2,7 +2,7 @@
 
 module ERBLint
   module Linters
-    class Indentation < Linter
+    module Indentation
       class BlockAlignment < RuboCop::Cop::Layout::BlockAlignment
         attr_reader :ir
 
@@ -17,18 +17,18 @@ module ERBLint
         private
 
         def format_message(start_loc, end_loc, do_source_line_column, error_source_line_column)
-          start_loc = ir.translate(start_loc)
-          end_loc = ir.translate(end_loc)
+          original_start_loc = ir.translate(start_loc)
+          original_end_loc = ir.translate(end_loc)
 
           # the indentation linter doesn't support the :start_of_block style, so the
           # error always occurs at start_loc, i.e. does not happen at the "do" or "{"
           error_source_line_column = {
-            source: start_loc.source_line.strip,
-            line: start_loc.line,
-            column: start_loc.column,
+            source: original_start_loc.source_line.strip,
+            line: original_start_loc.line,
+            column: original_start_loc.column,
           }
 
-          super(start_loc, end_loc, error_source_line_column, error_source_line_column)
+          super(original_start_loc, original_end_loc, error_source_line_column, error_source_line_column)
         end
       end
     end

@@ -10,4 +10,4 @@ end
 
 gemspec
 
-gem "pry-byebug"
+gem "debug"
